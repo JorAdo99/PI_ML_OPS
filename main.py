@@ -1,7 +1,9 @@
 from fastapi import FastAPI
 import pandas as pd
+from sklearn.linear_model import LinearRegression
+from sklearn.preprocessing import MultiLabelBinarizer
 from ast import literal_eval
-
+df_EDA= pd.read_csv('df_EDA.csv')
 df= pd.read_csv('data.csv')
 app= FastAPI()
 
@@ -27,8 +29,8 @@ def genero(Año: str):
             genero_contado[j]= genero_contado.get(j,0)+1
 
     generos_mas_vendidos = sorted(genero_contado , key=genero_contado.get, reverse=True)[:5] # Ordenar de mayor a menor y tomar los 3 primeros
-
-    return generos_mas_vendidos
+    generos_mas_vendidos_dict = {genero: genero_contado[genero] for genero in generos_mas_vendidos}
+    return generos_mas_vendidos_dict
 # Endpoint: /juegos/
 @app.get('/juegos/')
 def juegos(Año: str):
@@ -47,12 +49,12 @@ def specs(Año: str):
     df_filtrado['specs'] = df_filtrado['specs'].apply(convert_to_list)
     df_filtrado['specs'] = df_filtrado['specs'].apply(lambda x: x if x != 0 else '')
     
-    spects_contados={}
+    specs_contados = {}
     for i in df_filtrado['specs']:
-        for j in i :
-            spects_contados[j]= spects_contados.get(j,0)+1
+        for j in i:
+            specs_contados[j] = specs_contados.get(j, 0) + 1
 
-    specs_mas_repetidos= sorted(spects_contados , key=spects_contados.get, reverse=True)[:5] # Ordenar de mayor a menor y tomar los 3 primeros
+    specs_mas_repetidos = {spec: specs_contados[spec] for spec in sorted(specs_contados, key=specs_contados.get, reverse=True)[:5]}
 
     return specs_mas_repetidos        
 
@@ -77,6 +79,35 @@ def sentiment(Año: str):
 @app.get('/metascore/')
 def metascore(Año: str):
     df_filtrado = filtrar_por_año(Año)
-    df_filtrado_ordenado= df_filtrado.sort_values(by = 'metascore', ascending=False)
-    top_5= df_filtrado_ordenado.head(5)
-    return top_5['app_name'].to_list()
+    df_filtrado_ordenado = df_filtrado.sort_values(by='metascore', ascending=False)
+    top_5 = df_filtrado_ordenado.head(5)
+    
+    result_dict = {
+        'top_5_app_names': top_5['app_name'].tolist(),
+        'top_5_metascores': top_5['metascore'].tolist()
+    }
+    
+    return result_dict
+
+
+# ML
+mlb = MultiLabelBinarizer()
+X = mlb.fit_transform(df_EDA['valor'])
+y = df_EDA['price']
+
+modelo_precio = LinearRegression()
+modelo_precio.fit(X, y)
+
+# Función de predicción
+@app.get('/prediccion/')
+def prediccion(genero):
+    genero_encoded_input = mlb.transform([[genero]])
+    precio_predicho = modelo_precio.predict(genero_encoded_input)
+    return precio_predicho
+
+
+#if __name__ == "__main__":
+    # Ejemplo de uso de la función prediccion
+ #   genero_input = 'Action, Casual, Indie, Simulation, Strategy'
+  #  precio_estimado = prediccion(genero_input)
+   # print(f'Precio estimado para el género "{genero_input}": {precio_estimado}')
